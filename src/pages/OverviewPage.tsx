@@ -125,7 +125,7 @@ const successRate = Math.round(
 <MetricCard
   title="Online meters"
   value={`${online}`}
-  note="of demo fleet"
+  note="Of demo fleet"
   icon={Wifi}
   change={`${onlinePercentage}%`}
   positive={onlinePercentage >= 60}

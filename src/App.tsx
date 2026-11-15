@@ -19,6 +19,11 @@ import { getCustomerAlerts } from "@/lib/alerts";
 import { exportMetersCsv } from "@/lib/exportMeters";
 import { money } from "@/lib/format";
 import {
+  getAdminNotifications,
+  getCustomerNotifications,
+  type AppNotification,
+} from "@/lib/notifications";
+import {
   calculateUnits,
   formatTransactionDate,
   generateToken,
@@ -55,16 +60,19 @@ function App() {
   const [commandLogs, setCommandLogs] = useState<DemoCommand[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [meterToReset, setMeterToReset] = useState<Meter | null>(null);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const isCustomer = role === "Customer";
   const customer = meters.find((meter) => meter.id === customerId) ?? meters[0];
 
   const customerAlerts = getCustomerAlerts(customer, transactions);
-  const actionableAlertCount = customerAlerts.filter(
-    (alert) => alert.severity !== "success",
-  ).length;
-  const adminAlertCount = meters.filter(
-    (meter) => meter.status !== "Online",
+  const notifications = isCustomer
+    ? getCustomerNotifications(customer.id, customerAlerts)
+    : getAdminNotifications(meters, transactions);
+  const unreadCount = notifications.filter(
+    (notification) => !readNotificationIds.has(notification.id),
   ).length;
   const pendingPaymentCount = transactions.filter(
     (transaction) => transaction.status === "Pending",
@@ -81,6 +89,24 @@ function App() {
       }
     : { name: "Admin Demo", subtitle: "Administrator", initials: "AD" };
 
+  const markNotificationsRead = (ids: string[]) => {
+    setReadNotificationIds((previous) => {
+      // Return the same Set when nothing changes so React skips re-rendering.
+      if (ids.every((id) => previous.has(id))) return previous;
+      return new Set([...previous, ...ids]);
+    });
+  };
+
+  const handleNotificationSelect = (notification: AppNotification) => {
+    markNotificationsRead([notification.id]);
+
+    if (notification.link === "Alerts") {
+      setCustomerPage("Alerts");
+    } else {
+      setActivePage(notification.link);
+    }
+  };
+
   useEffect(() => {
     if (!toastMessage) return;
 
@@ -95,54 +121,62 @@ function App() {
     window.scrollTo({ top: 0 });
   }, [role, activePage, customerPage]);
 
- const runDemoCommand = (meter: Meter, action: string) => {
-  const now = new Date();
+  // Viewing the customer's Alerts page counts as reading everything on it.
+  // Runs every render on purpose; it's a no-op once everything is read.
+  useEffect(() => {
+    if (isCustomer && customerPage === "Alerts") {
+      markNotificationsRead(notifications.map((notification) => notification.id));
+    }
+  });
 
-  const newCommand: DemoCommand = {
-    id: `CMD-${Date.now()}`,
-    meterId: meter.id,
-    action,
-    status: "Completed",
-    time: now.toLocaleString(),
+  const runDemoCommand = (meter: Meter, action: string) => {
+    const now = new Date();
+
+    const newCommand: DemoCommand = {
+      id: `CMD-${Date.now()}`,
+      meterId: meter.id,
+      action,
+      status: "Completed",
+      time: now.toLocaleString(),
+    };
+
+    setCommandLogs((previousLogs) => [newCommand, ...previousLogs]);
+
+    if (
+      action === "Refresh meter" ||
+      action === "Reset meter" ||
+      action === "Simulate outage"
+    ) {
+      setMeters((previousMeters) =>
+        previousMeters.map((item) =>
+          item.id === meter.id
+            ? {
+                ...item,
+                lastChecked: now.toLocaleString(),
+                ...(action === "Reset meter" && {
+                  lastReset: now.toLocaleString(),
+                  status: "Online" as MeterStatus,
+                }),
+                ...(action === "Simulate outage" && {
+                  status: "Offline" as MeterStatus,
+                }),
+              }
+            : item,
+        ),
+      );
+    }
+
+    const message =
+      action === "Run diagnostics"
+        ? `Simulated diagnostics completed for ${meter.id}. Status: ${meter.status}.`
+        : action === "Reset meter"
+          ? `Simulated reset completed for ${meter.id}.`
+          : action === "Simulate outage"
+            ? `Simulated outage: ${meter.id} is now offline.`
+            : `Simulated refresh completed for ${meter.id}.`;
+
+    setToastMessage(message);
   };
-
-  setCommandLogs((previousLogs) => [newCommand, ...previousLogs]);
-
-  if (
-    action === "Refresh meter" ||
-    action === "Reset meter" ||
-    action === "Simulate outage"
-  ) {
-    setMeters((previousMeters) =>
-      previousMeters.map((item) =>
-        item.id === meter.id
-          ? {
-              ...item,
-              lastChecked: now.toLocaleString(),
-              ...(action === "Reset meter" && {
-                lastReset: now.toLocaleString(),
-                status: "Online" as MeterStatus,
-              }),
-              ...(action === "Simulate outage" && {
-                status: "Offline" as MeterStatus,
-              }),
-            }
-          : item,
-      ),
-    );
-  }
-
-  const message =
-    action === "Run diagnostics"
-      ? `Simulated diagnostics completed for ${meter.id}. Status: ${meter.status}.`
-      : action === "Reset meter"
-        ? `Simulated reset completed for ${meter.id}.`
-        : action === "Simulate outage"
-          ? `Simulated outage: ${meter.id} is now offline.`
-          : `Simulated refresh completed for ${meter.id}.`;
-
-  setToastMessage(message);
-};
 
   const confirmReset = () => {
     if (meterToReset) {
@@ -251,11 +285,7 @@ function App() {
           items={customerNavigation}
           activePage={customerPage}
           onNavigate={setCustomerPage}
-          badges={
-            actionableAlertCount > 0
-              ? { Alerts: actionableAlertCount }
-              : undefined
-          }
+          badges={unreadCount > 0 ? { Alerts: unreadCount } : undefined}
           mobileOpen={mobileMenuOpen}
           onMobileClose={() => setMobileMenuOpen(false)}
         />
@@ -286,11 +316,13 @@ function App() {
           role={role}
           onRoleChange={handleRoleChange}
           user={user}
-          notificationCount={
-            isCustomer ? actionableAlertCount : adminAlertCount
-          }
-          onNotificationsClick={() =>
-            isCustomer ? setCustomerPage("Alerts") : setActivePage("Meters")
+          notifications={notifications}
+          readIds={readNotificationIds}
+          onNotificationSelect={handleNotificationSelect}
+          onMarkAllRead={() =>
+            markNotificationsRead(
+              notifications.map((notification) => notification.id),
+            )
           }
           onOpenMenu={() => setMobileMenuOpen(true)}
         />

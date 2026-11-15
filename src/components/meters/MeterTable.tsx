@@ -89,7 +89,7 @@ export function MeterTable({
               </TableCell>
 
               <TableCell>
-                <div className="flex items-center gap-2">
+                <div className="flex w-max items-center gap-2">
                   <Button
                     size="sm"
                     variant="outline"

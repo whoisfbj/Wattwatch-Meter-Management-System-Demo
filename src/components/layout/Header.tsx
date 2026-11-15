@@ -1,4 +1,5 @@
-import { Bell, Check, ChevronDown, ChevronRight, Menu } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Menu } from "lucide-react";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { AppNotification } from "@/lib/notifications";
 import type { Role } from "@/types";
 
 const roleOptions: { role: Role; description: string }[] = [
@@ -21,8 +23,10 @@ export function Header({
   role,
   onRoleChange,
   user,
-  notificationCount,
-  onNotificationsClick,
+  notifications,
+  readIds,
+  onNotificationSelect,
+  onMarkAllRead,
   onOpenMenu,
 }: {
   activePage: string;
@@ -30,8 +34,10 @@ export function Header({
   role: Role;
   onRoleChange: (role: Role) => void;
   user: { name: string; subtitle: string; initials: string };
-  notificationCount: number;
-  onNotificationsClick: () => void;
+  notifications: AppNotification[];
+  readIds: Set<string>;
+  onNotificationSelect: (notification: AppNotification) => void;
+  onMarkAllRead: () => void;
   onOpenMenu: () => void;
 }) {
   return (
@@ -64,59 +70,53 @@ export function Header({
           DEMO
         </Badge>
 
-       <Button
-  variant="ghost"
-  size="icon"
-  className="relative text-slate-500"
-  onClick={onNotificationsClick}
-  aria-label={`Notifications (${notificationCount})`}
->
-  <Bell size={19} />
-  {notificationCount > 0 && (
-    <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white ring-2 ring-white">
-      {notificationCount}
-    </span>
-  )}
-</Button>
+        <NotificationBell
+          notifications={notifications}
+          readIds={readIds}
+          onSelect={onNotificationSelect}
+          onMarkAllRead={onMarkAllRead}
+        />
 
         <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
-       <DropdownMenu>
-  <DropdownMenuTrigger
-    aria-label="Open account menu"
-    className="flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-  >
-    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-      {user.initials}
-    </div>
-    <div className="hidden text-left sm:block">
-      <p className="text-sm font-medium">{user.name}</p>
-      <p className="text-xs text-slate-400">{user.subtitle}</p>
-    </div>
-    <ChevronDown size={15} className="hidden text-slate-400 sm:block" />
-  </DropdownMenuTrigger>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Open account menu"
+            className="flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              {user.initials}
+            </div>
+            <div className="hidden text-left sm:block">
+              <p className="text-sm font-medium">{user.name}</p>
+              <p className="text-xs text-slate-400">{user.subtitle}</p>
+            </div>
+            <ChevronDown size={15} className="hidden text-slate-400 sm:block" />
+          </DropdownMenuTrigger>
 
-  <DropdownMenuContent align="end" className="w-64">
-    <div className="px-2 py-1.5 text-xs text-slate-500">Demo: switch role</div>
-    <DropdownMenuSeparator />
+          <DropdownMenuContent align="end" className="w-64">
+            <div className="px-2 py-1.5 text-xs text-slate-500">
+              Demo: switch role
+            </div>
+            <DropdownMenuSeparator />
 
-    {roleOptions.map((option) => (
-      <DropdownMenuItem
-        key={option.role}
-        onClick={() => onRoleChange(option.role)}
-        className="cursor-pointer items-start gap-3"
-      >
-        <div className="flex-1">
-          <p className="text-sm font-medium">{option.role}</p>
-          <p className="text-xs text-slate-500">{option.description}</p>
-        </div>
-        {role === option.role && (
-          <Check size={16} className="mt-0.5 text-emerald-600" />
-        )}
-      </DropdownMenuItem>
-    ))}
-  </DropdownMenuContent>
-</DropdownMenu>
+            {roleOptions.map((option) => (
+              <DropdownMenuItem
+                key={option.role}
+                onClick={() => onRoleChange(option.role)}
+                className="cursor-pointer items-start gap-3"
+              >
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{option.role}</p>
+                  <p className="text-xs text-slate-500">{option.description}</p>
+                </div>
+                {role === option.role && (
+                  <Check size={16} className="mt-0.5 text-emerald-600" />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
